@@ -1,0 +1,16 @@
+# Example Caddy config. Replace cloud.example.com with your domain;
+# Caddy obtains and renews the TLS certificate automatically.
+# Run KumoKeep with KUMOKEEP_BASE_URL=https://cloud.example.com and KUMOKEEP_TRUST_PROXY=true.
+
+cloud.example.com {
+	encode zstd gzip
+
+	# Large uploads go through tus/WebDAV; don't let Caddy buffer them.
+	request_body {
+		max_size 0
+	}
+
+	reverse_proxy 127.0.0.1:8080 {
+		flush_interval -1
+	}
+}

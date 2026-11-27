@@ -1,0 +1,14 @@
+# Local data
+/data/
+
+# Go
+/server/bin/
+
+# Web build embedded into the server (keep the placeholder for go:embed)
+/server/internal/web/dist/*
+!/server/internal/web/dist/.placeholder
+
+# Env files
+.env
+.env.*
+!.env.example

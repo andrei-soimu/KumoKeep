@@ -1,0 +1,196 @@
+openapi: 3.1.0
+info:
+  title: KumoKeep API
+  version: 0.1.0
+  description: |
+    The KumoKeep JSON API used by the web and mobile apps.
+
+    The password vault is not part of this API: it is served at `/vault`
+    using the Bitwarden client protocol.
+
+    Web clients authenticate with the session cookie set by `login` and
+    `register`. Mobile token authentication will be added later.
+    Request bodies must be `application/json`.
+  license:
+    name: AGPL-3.0-or-later
+    identifier: AGPL-3.0-or-later
+servers:
+  - url: /api/v1
+
+security:
+  - session: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Log in and start a web session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              additionalProperties: false
+              properties:
+                login: { type: string, description: Username or email address }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Logged in. Sets the session cookie.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /auth/register:
+    post:
+      operationId: register
+      summary: Create an account from an invite and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invite, username, email, password]
+              additionalProperties: false
+              properties:
+                invite: { type: string, description: Token from the invite link }
+                username:
+                  type: string
+                  pattern: "^[a-z0-9][a-z0-9._-]{2,31}$"
+                email: { type: string, format: email }
+                password: { type: string, format: password, minLength: 12 }
+      responses:
+        "201":
+          description: Account created. Sets the session cookie.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: End the current session
+      responses:
+        "204": { description: Logged out. Clears the session cookie. }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /me:
+    get:
+      operationId: getMe
+      summary: The authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /admin/invites:
+    post:
+      operationId: createInvite
+      summary: Create a one-time registration invite (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Restrict the invite to this address. Omit to allow any.
+                role: { $ref: "#/components/schemas/Role" }
+                expires_hours:
+                  type: integer
+                  minimum: 1
+                  maximum: 720
+                  default: 168
+      responses:
+        "201":
+          description: Invite created. The token is only shown once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, url, expires_at]
+                properties:
+                  token: { type: string }
+                  url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-kk_session
+      description: Named `kk_session` when served over plain HTTP in development.
+
+  schemas:
+    Role:
+      type: string
+      enum: [admin, user]
+      default: user
+
+    User:
+      type: object
+      required: [id, username, email, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/Role" }
+        created_at: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Stable machine-readable code, e.g. `invalid_credentials`.
+        message:
+          type: string
+          description: Human-readable explanation.
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
